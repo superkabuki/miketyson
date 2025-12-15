@@ -100,9 +100,11 @@ class Mvhd(Box):
         self.duration=None
         self.rate = None
         self.volume= None
+        self.next_track_id=None
 
     def decode(self,r):
         idx = r.tell()
+        self.version=b2i(r.read(4))
         if self.version == 0:
             self.creation_time = b2i(r.read(4))
             self.modification_time = b2i(r.read(4))
@@ -113,9 +115,12 @@ class Mvhd(Box):
             self.modification_time = b2i(r.read(8))
             self.timescale = b2i(r.read(4))
             self.duration = b2i(r.read(8))            
-        self.rate =  b2i(r.read(4))
+        self.rate =  b2i(r.read(2))
+        r.read(1)
         self.volume =  b2i(r.read(2))
-        reserved = b2i(r.read(2))
+        reserved = b2i(r.read(1))
+        r.seek(idx+self.size-12)
+        self.next_track_id=b2i(r.read(4))
         r.seek(idx+self.size)
         print(self.__dict__)
                
@@ -151,6 +156,8 @@ class Tkhd(Box):
 
     def decode(self,r):
         idx = r.tell()
+        self.flags=b2i(r.read(4))
+        #self.version=b2i(r.read(4))
         if self.version == 0:
             self.creation_time = b2i(r.read(4))
             self.modification_time = b2i(r.read(4))
@@ -174,7 +181,8 @@ class Tkhd(Box):
         self.width = b2i(r.read(4))
         self.height= b2i(r.read(4))
         r.seek(idx+self.payload_size)
-        print(vars(self))
+        print(self.__dict__)
+
 
         
 boxes = {
