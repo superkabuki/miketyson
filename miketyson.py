@@ -13,11 +13,11 @@ def iterboxes(r):
         if not eight_bites:
             sys.exit()
         header =BoxHeader(idx,eight_bites)
-        print(f'\nHeader {vars(header)}')
         if header.name in boxes:
             box = boxes[header.name](header)
         else:
             box =Box(header)
+#            print(f'\nHeader {vars(header)}')
         box.decode(r)
 
 
@@ -52,8 +52,18 @@ class Box:
         nopay=self.__dict__
         nopay.pop('pay')
         print(nopay)
+        r.seek(self.idx+self.size)
 
-        
+
+
+class FullBox:
+    """
+    aligned(8) class FullBox(unsigned int(32) boxtype, unsigned int(8) v, bit(24) f)
+extends Box(boxtype) {
+unsigned int(8) version = v;
+bit(24) flags = f;
+"""
+
 class Ftyp(Box):
     def __init__(self,header):
         super().__init__(header)
@@ -69,18 +79,19 @@ class Ftyp(Box):
         pay = pay[8:]
         self.compatible_brands=[pay[i:i+4] for i in range(0,len(pay),4)]
         print(self.__dict__)
+        r.seek(self.idx+self.size)
 
 
 class Moov(Box):
     def __init__(self,header):
-        super().__init__(header)    
+        super().__init__(header)
 
     def decode(self,r):
         psize = self.payload_size
         while psize > 7:
             iterboxes(r)
- 
-            
+        r.seek(self.idx+self.size)
+
 class Mdat(Box):
     def __init__(self,header):
         super().__init__(header)
@@ -88,11 +99,12 @@ class Mdat(Box):
 
     def decode(self,r):
         self.data = r.read(self.payload_size)
-
+        r.seek(self.idx+self.size)
 
 class Mvhd(Box):
     def __init__(self,header):
         super().__init__(header)
+        self.flags=None
         self.version=0
         self.creation_time=None
         self.modification_time=None
@@ -100,11 +112,17 @@ class Mvhd(Box):
         self.duration=None
         self.rate = None
         self.volume= None
-        self.next_track_id=None
+        self.matrix=None
+        self.bit = None
+        self.reserved=None
+        self.reserved1=None
+        self.reserved2=None
+        self.next_track_ID=None
 
     def decode(self,r):
         idx = r.tell()
-        self.version=b2i(r.read(4))
+        self.version=b2i(r.read(1))
+        self.flags=b2i(r.read(3))
         if self.version == 0:
             self.creation_time = b2i(r.read(4))
             self.modification_time = b2i(r.read(4))
@@ -114,16 +132,22 @@ class Mvhd(Box):
             self.creation_time = b2i(r.read(8))
             self.modification_time = b2i(r.read(8))
             self.timescale = b2i(r.read(4))
-            self.duration = b2i(r.read(8))            
-        self.rate =  b2i(r.read(2))
-        r.read(1)
-        self.volume =  b2i(r.read(2))
-        reserved = b2i(r.read(1))
-        r.seek(idx+self.size-12)
-        self.next_track_id=b2i(r.read(4))
-        r.seek(idx+self.size)
+            self.duration = b2i(r.read(8))
+        self.rate =  b2i(r.read(2)) # 16.
+        self.rate += b2i(r.read(2))/100 # .16
+
+        self.volume =  b2i(r.read(1)) # 8.
+        self.volume +=b2i(r.read(1))/10 # .8
+        self.reserved = b2i(r.read(2))
+        # r.seek(idx+self.size)
+        self.reserved1 =  b2i(r.read(4))
+        self.reserved2=  b2i(r.read(4))
+        self.matrix=[hex(b2i(r.read(4))) for i in range(9)]
+        self.bit=[hex(b2i(r.read(4))) for i in range(6)]
+        self.next_track_ID=  b2i(r.read(4))
         print(self.__dict__)
-               
+        r.seek(self.idx+self.size)
+
 """const unsigned int(32)[2] reserved = 0;
 template int(32)[9] matrix =
 { 0x00010000,0,0,0,0x00010000,0,0,0,0x40000000 };
@@ -133,7 +157,7 @@ unsigned int(32) next_track_ID;
 """
 
 class Mdia(Box):
-    
+
     def decode(self,r):
         self.pay = r.read(self.payload_size)
 
@@ -156,20 +180,18 @@ class Tkhd(Box):
 
     def decode(self,r):
         idx = r.tell()
-        self.flags=b2i(r.read(4))
-        #self.version=b2i(r.read(4))
         if self.version == 0:
             self.creation_time = b2i(r.read(4))
             self.modification_time = b2i(r.read(4))
             self.track_id = b2i(r.read(4))
-            reserved = b2i(r.read(4)) 
+            reserved = b2i(r.read(4))
             self.duration = b2i(r.read(4))
         else:
             self.creation_time = b2i(r.read(8))
             self.modification_time = b2i(r.read(8))
             self.track_id = b2i(r.read(4))
             reserved = b2i(r.read(4))
-            self.duration = b2i(r.read(8))            
+            self.duration = b2i(r.read(8))
         self.rate =  b2i(r.read(4))
         self.volume =  b2i(r.read(2))
         reserved = b2i(r.read(2))
@@ -181,10 +203,9 @@ class Tkhd(Box):
         self.width = b2i(r.read(4))
         self.height= b2i(r.read(4))
         r.seek(idx+self.payload_size)
-        print(self.__dict__)
+        print(vars(self))
 
 
-        
 boxes = {
     b"ftyp": Ftyp,
     b"moov":Moov,
